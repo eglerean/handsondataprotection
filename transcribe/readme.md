@@ -11,7 +11,7 @@ Make sure you have the tools installed (see for example the conda environment in
 
 First run
 
-`whisper JohnChowning041306_part1.ogg --model_dir 
+`whisper JohnChowning041306_part1.ogg --model_dir ./model_dir/  --output_dir ./transcriptions/`
 
 
 The original interview is released uder CC-SA and is available at https://upload.wikimedia.org/wikipedia/commons/f/f7/JohnChowning041306_part1.ogg 
