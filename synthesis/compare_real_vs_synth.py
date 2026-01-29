@@ -3,22 +3,73 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-REAL_XLSX = "hodp2026_pseudonymised.xlsx"
-SYN_XLSX = "synthetic_data.xlsx"
+REAL_XLSX = "hodp2026_pseudonymised.csv"
+SYN_XLSX = "synthetic_data.csv"
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Make column names comparable across CSV exports (strip spaces, remove BOM/NBSP)."""
+    df = df.copy()
+    df.columns = (
+        pd.Index(df.columns)
+        .astype(str)
+        .str.replace("\ufeff", "", regex=False)   # BOM (often from UTF-8-SIG)
+        .str.replace("\xa0", " ", regex=False)    # non-breaking space
+        .str.strip()
+    )
+    return df
+
+
+def _find_col(df: pd.DataFrame, wanted: str) -> str:
+    """Find a column name case-insensitively, ignoring leading/trailing whitespace."""
+    key = str(wanted).strip().lower()
+    lookup = {str(c).strip().lower(): c for c in df.columns}
+    if key not in lookup:
+        raise KeyError(
+            f"Column '{wanted}' not found. Available columns: {list(df.columns)}"
+        )
+    return lookup[key]
+
+
+def _read_csv_robust(path: str) -> pd.DataFrame:
+    """
+    Read CSV robustly across locales:
+    - sep=None + engine='python' lets pandas sniff ',' vs ';'
+    - encoding='utf-8-sig' strips BOM if present
+    """
+    df = pd.read_csv(path, sep=None, engine="python", encoding="utf-8-sig")
+    return _normalize_columns(df)
 
 
 def load_data(real_path: str, syn_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    real_df = pd.read_excel(real_path)
-    syn_df = pd.read_excel(syn_path)
+    real_df = _read_csv_robust(real_path)
+    syn_df = _read_csv_robust(syn_path)
     return real_df, syn_df
 
 
-def plot_age_hist(real_df: pd.DataFrame, syn_df: pd.DataFrame, col="Age", out_path="age_hist.png"):
-    if col not in real_df.columns or col not in syn_df.columns:
-        raise KeyError(f"Column '{col}' must exist in both files.")
+def _to_numeric_series(s: pd.Series) -> pd.Series:
+    """
+    Convert to numeric safely:
+    - treat comma decimals (e.g. '12,5') as '.' (rare for Age, but harmless)
+    - coerce non-numeric to NaN
+    """
+    x = s.astype(str).str.replace("\xa0", " ", regex=False).str.strip()
+    x = x.str.replace(",", ".", regex=False)
+    return pd.to_numeric(x, errors="coerce")
 
-    r = pd.to_numeric(real_df[col], errors="coerce").dropna()
-    s = pd.to_numeric(syn_df[col], errors="coerce").dropna()
+
+def plot_age_hist(
+    real_df: pd.DataFrame,
+    syn_df: pd.DataFrame,
+    col="Age",
+    out_path="age_hist.png",
+):
+    # find the matching column names robustly
+    real_col = _find_col(real_df, col)
+    syn_col = _find_col(syn_df, col)
+
+    r = _to_numeric_series(real_df[real_col]).dropna()
+    s = _to_numeric_series(syn_df[syn_col]).dropna()
 
     if r.empty or s.empty:
         raise ValueError("Age column has no numeric values in real and/or synthetic data.")
@@ -53,17 +104,17 @@ def plot_categorical_compare(
     out_path="sex_education_compare.png",
     top_n_for_long=None,  # e.g. 15 for Education; None shows all categories
 ):
-    for c in cols:
-        if c not in real_df.columns or c not in syn_df.columns:
-            raise KeyError(f"Column '{c}' must exist in both files.")
+    # resolve columns robustly (case/whitespace/BOM)
+    real_cols = {c: _find_col(real_df, c) for c in cols}
+    syn_cols = {c: _find_col(syn_df, c) for c in cols}
 
     fig, axes = plt.subplots(len(cols), 1, figsize=(11, 4.5 * len(cols)), constrained_layout=True)
     if len(cols) == 1:
         axes = [axes]
 
     for ax, col in zip(axes, cols):
-        rc = _normalized_counts(real_df[col])
-        sc = _normalized_counts(syn_df[col])
+        rc = _normalized_counts(real_df[real_cols[col]])
+        sc = _normalized_counts(syn_df[syn_cols[col]])
 
         # align categories (union of both)
         cats = rc.index.union(sc.index)
@@ -102,7 +153,6 @@ def main():
     plot_age_hist(real_df, syn_df, col="Age", out_path="age_hist.png")
 
     # Plot 2: Sex + Education distributions
-    # If Education has many categories, set top_n_for_long=15 to keep it readable
     plot_categorical_compare(
         real_df, syn_df,
         cols=("Sex", "Education"),
@@ -115,3 +165,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

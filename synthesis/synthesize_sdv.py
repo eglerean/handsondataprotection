@@ -3,8 +3,8 @@ from sdv.single_table import CTGANSynthesizer
 from sdv.metadata import Metadata
 
 # Load a specific sheet and specific columns
-file_path='hodp2026_pseudonymised.xlsx'
-df = pd.read_excel(file_path)
+file_path='hodp2026_pseudonymised.csv'
+df = pd.read_csv(file_path)
 
 # Preview the DataFrame
 print(df)
@@ -25,8 +25,8 @@ synthesizer.fit(df)
 
 synthetic_data = synthesizer.sample(num_rows=1000)
 print(synthetic_data)
-syn_file_path='synthetic_data.xlsx'
-synthetic_data.to_excel(syn_file_path, index=False)
+syn_file_path='synthetic_data.csv'
+synthetic_data.to_csv(syn_file_path, index=False)
 
 from sdv.evaluation.single_table import run_diagnostic
 
